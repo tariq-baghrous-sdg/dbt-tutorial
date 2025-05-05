@@ -1,13 +1,14 @@
-variable "config" {
-    type = string
-    description = "path to config.yml file"
+variable "project_id" {
+  type        = string
+  description = "GCP project ID"
 }
 
-variable "env" {
-    type = string
-    validation {
-        condition = contains(["dev", "prd"], var.env)
-        error_message = "env must be dev or prd"
-    }
+variable "region" {
+  type        = string
+  default     = "europe-west8"
 }
 
+variable "bucket_name" {
+  type        = string
+  description = "Name of the GCS bucket to upload the function source"
+}
