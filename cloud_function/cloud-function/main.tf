@@ -47,8 +47,24 @@ locals {
     )
   )
 
+  sa_identities_cmek = [
+    "serviceAccount:service-${data.google_project.project.number}@gcf-admin-robot.iam.gserviceaccount.com",
+    "serviceAccount:service-${data.google_project.project.number}@gcp-sa-artifactregistry.iam.gserviceaccount.com",
+    "serviceAccount:service-${data.google_project.project.number}@gs-project-accounts.iam.gserviceaccount.com",
+    "serviceAccount:service-${data.google_project.project.number}@serverless-robot-prod.iam.gserviceaccount.com"
+  ]
+
+  apis = [
+    "cloudbuild.googleapis.com",
+    "cloudfunctions.googleapis.com"
+  ]
 }
 
+resource "google_project_service" "cf-api" {
+  for_each = toset(local.apis)
+  project  = var.project_id
+  service  = each.value
+}
 
 resource "google_vpc_access_connector" "connector" {
   count   = try(var.vpc_connector.create, false) == false ? 0 : 1
@@ -132,20 +148,43 @@ resource "google_cloudfunctions_function" "function" {
   }
 }
 
+data "google_project" "project" {
+  project_id = var.project_id
+}
 
+resource "google_kms_crypto_key_iam_member" "ar-sa-permissions" {
+  for_each      = toset(local.sa_identities_cmek)
+  crypto_key_id = var.kms_key_name
+  member        = each.value
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  depends_on    = [data.google_project.project]
+}
+
+resource "google_artifact_registry_repository" "encoded-ar-repo" {
+  provider      = google-beta
+  count         = var.kms_key_name != null ? 1 : 0
+  project       = var.project_id
+  location      = var.region
+  repository_id = "cmek-repo-cf2"
+  format        = "DOCKER"
+  kms_key_name  = var.kms_key_name
+  depends_on    = [google_kms_crypto_key_iam_member.ar-sa-permissions]
+}
 
 resource "google_cloudfunctions2_function" "function" {
-  count       = var.v2 ? 1 : 0
-  provider    = google-beta
-  project     = var.project_id
-  location    = var.region
-  name        = "${local.prefix}${var.name}"
-  description = var.description
+  count        = var.v2 ? 1 : 0
+  kms_key_name = var.kms_key_name
+  provider     = google-beta
+  project      = var.project_id
+  location     = var.region
+  name         = "${local.prefix}${var.name}"
+  description  = var.description
   build_config {
     worker_pool           = var.build_worker_pool
     runtime               = var.function_config.runtime
     entry_point           = var.function_config.entry_point #"${var.function_config.entry_point}_http" # Set the entry point 
     environment_variables = var.environment_variables
+    docker_repository     = google_artifact_registry_repository.encoded-ar-repo[0].id
     source {
       storage_source {
         bucket = local.bucket
@@ -215,8 +254,8 @@ resource "google_cloudfunctions2_function" "function" {
       }
     }
   }
-  labels = var.labels
-  depends_on = [ google_vpc_access_connector.connector ]
+  labels     = var.labels
+  depends_on = [google_vpc_access_connector.connector, google_project_service.cf-api]
 }
 
 resource "google_cloudfunctions_function_iam_binding" "default" {
@@ -270,9 +309,10 @@ resource "google_storage_bucket" "bucket" {
 }
 
 resource "google_storage_bucket_object" "bundle" {
-  name   = "${var.name}-${substr(data.archive_file.bundle.output_sha256, 0, 5)}.zip"
-  bucket = local.bucket
-  source = data.archive_file.bundle.output_path
+  name         = "${var.name}-${substr(data.archive_file.bundle.output_sha256, 0, 5)}.zip"
+  bucket       = local.bucket
+  source       = data.archive_file.bundle.output_path
+  kms_key_name = var.kms_key_name
 }
 
 data "archive_file" "bundle" {

@@ -87,6 +87,11 @@ variable "ingress_settings" {
   default     = null
 }
 
+variable "kms_key_name" {
+  description = "value" #TODO
+  type        = string
+}
+
 variable "labels" {
   description = "Resource labels."
   type        = map(string)
@@ -164,7 +169,7 @@ variable "trigger_config" {
       event_filters = optional(list(object({
         attribute = string
         value     = string
-        operator  = optional(string) 
+        operator  = optional(string)
       })))
       service_account_email  = optional(string)
       service_account_create = optional(bool)

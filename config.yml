@@ -1,23 +1,25 @@
 info:
   projects:
-    dev: your-dev-project-id
-    prd: your-prd-project-id
-  service_account: your-service-account-name
+    test: credem-aiddai-workarea-test
+  service_account: aiddai-tech-sa
+  kms_keys:
+    test: projects/credem-googcp-keys-test/locations/europe-west8/keyRings/hsm-keys-test-west8/cryptoKeys/cypherkey-hsm-test-west8
 
 cloud_function:
-  dev:
+  test:
     bucket:
-      name: my-bundle-bucket
-      location: europe-west1
+      name: test-cf-bucket-ainex3
+      location: europe-west8
       create_new: true
     functions:
       hello-world:
         name: hello-world
-        description: "Simple hello world function"
-        region: europe-west1
+        description: "hello world function"
+        version: 2
+        region: europe-west8
         source_folder: .
         trigger_config:
           trigger: http
-          allow_unauthenticated: true
+          allow_unauthenticated: false
         env_variables: {}
         ingress_settings: "ALLOW_ALL"
